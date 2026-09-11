@@ -33,8 +33,7 @@
     color:var(--ink); border-bottom:3px solid var(--gov-blue);
   }
   .brand{ display:flex; align-items:center; gap:11px; min-width:0; }
-  .seal{ width:36px; height:36px; flex-shrink:0; color:var(--gov-blue); }
-  .seal text{ font-family:'IBM Plex Mono', monospace; }
+  .seal{ width:36px; height:36px; flex-shrink:0; object-fit:contain; }
   .brand-text h1{ font-family:'Pretendard', sans-serif; font-weight:800; font-size:16.5px; margin:0; color:#1B2A4A; letter-spacing:0.1px; }
   .tagline{ margin:2px 0 0; font-size:9.5px; color:var(--ink-faint); font-family:'IBM Plex Mono', monospace; letter-spacing:1px; }
 
@@ -348,18 +347,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <svg class="seal" viewBox="0 0 100 100" aria-hidden="true">
-        <defs><path id="sealRing" d="M 50,50 m -37,0 a 37,37 0 1,1 74,0 a 37,37 0 1,1 -74,0" /></defs>
-        <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="1.4"/>
-        <circle cx="50" cy="50" r="37" fill="none" stroke="currentColor" stroke-width="1"/>
-        <text font-size="8.6" fill="currentColor" letter-spacing="2">
-          <textPath href="#sealRing" startOffset="4%">초자연재난관리국 · 신규조사반 · </textPath>
-        </text>
-        <circle cx="50" cy="50" r="33" fill="#1B4A9C"/>
-        <path d="M50,17 A33,33 0 0,1 50,83 A16.5,16.5 0 0,1 50,50 A16.5,16.5 0 0,0 50,17 Z" fill="#C23B3B"/>
-        <circle cx="50" cy="33.5" r="16.5" fill="#C23B3B"/>
-        <circle cx="50" cy="66.5" r="16.5" fill="#1B4A9C"/>
-      </svg>
+      <img class="seal" src="logo.png" alt="초자연재난관리국 로고">
       <div class="brand-text">
         <h1>초자연재난관리국 신규조사반</h1>
         <p class="tagline">INTERNAL COMMS · SECURE CHANNEL</p>
@@ -1222,12 +1210,7 @@ function renderRecruitDetailPanel(){
 }
 
 /* ---------- 매뉴얼 게시판 ---------- */
-const TAEGEUK_SVG = `<svg class="manual-taegeuk" viewBox="0 0 100 100" aria-hidden="true">
-  <circle cx="50" cy="50" r="50" fill="#1B4A9C"/>
-  <path d="M50,0 A50,50 0 0,1 50,100 A25,25 0 0,1 50,50 A25,25 0 0,0 50,0 Z" fill="#C23B3B"/>
-  <circle cx="50" cy="25" r="25" fill="#C23B3B"/>
-  <circle cx="50" cy="75" r="25" fill="#1B4A9C"/>
-</svg>`;
+const TAEGEUK_SVG = `<img class="manual-taegeuk" src="logo.png" alt="초자연재난관리국 로고">`;
 function manualExitBtnHtml(){
   return `<button type="button" class="manual-exit" id="manualExitBtn">‹ 신규조사반으로 돌아가기</button>`;
 }
