@@ -1577,6 +1577,7 @@ function boot(){
       if(currentMode === 'chat') renderChannelRows();
       snap.docChanges().forEach((change) => {
         if(change.type !== 'added') return;
+        if(isRoomLocked(ch)) return;
         const m = change.doc.data();
         if(!m.sentAt || toJsDate(m.sentAt).toISOString() <= notifBootTime) return;
         if(m.authorId === myAgentId) return;
