@@ -258,7 +258,7 @@
   .manual-detail-title{ font-size:21px; font-weight:800; color:#1B2A4A; margin:0; }
   .manual-detail-meta{ font-size:12px; color:#7A8290; margin:0 0 22px; font-family:'IBM Plex Mono', monospace; }
   .manual-detail-content{ font-size:14px; line-height:1.8; color:#28303D; white-space:pre-wrap; word-break:break-word; }
-  .manual-detail-content img{ max-width:100%; border-radius:4px; margin:12px 0; display:block; }
+  .manual-detail-content img{ max-width:100%; border-radius:4px; margin:12px 0; display:inline-block; }
   .manual-detail-actions{ margin-top:26px; padding-top:16px; border-top:1px solid #EEF0F3; }
   .manual-page .empty{ padding:40px 12px; }
 
@@ -311,7 +311,7 @@
     white-space:pre-wrap; word-break:break-word;
   }
   .content-editable:focus-visible{ outline:2px solid var(--gov-blue); outline-offset:1px; }
-  .content-editable img{ max-width:100%; border-radius:4px; margin:6px 0; display:block; }
+  .content-editable img{ max-width:100%; border-radius:4px; margin:6px 0; display:inline-block; }
   .modal-manual .content-editable{ border:1px solid #C7CDD6; background:#F9FAFC; min-height:180px; }
   .modal-manual .content-editable:focus-visible{ outline:2px solid #1B4A9C; }
 
@@ -566,6 +566,53 @@ function resizeImageToDataURLFit(file, maxWidth){
     };
     reader.readAsDataURL(file);
   });
+}
+function wrapManualEditorBlocks(editor){
+  Array.from(editor.childNodes).forEach((node) => {
+    if(node.nodeType === 3 && !node.textContent.trim()) return;
+    if(node.nodeType === 1 && (node.tagName === 'DIV' || node.tagName === 'P')) return;
+    const div = document.createElement('div');
+    editor.insertBefore(div, node);
+    div.appendChild(node);
+  });
+}
+function currentManualRange(editor){
+  const sel = window.getSelection();
+  if(sel && sel.rangeCount > 0){
+    const r = sel.getRangeAt(0);
+    if(editor.contains(r.commonAncestorContainer)) return r;
+  }
+  return null;
+}
+function applyManualAlign(editor, align){
+  wrapManualEditorBlocks(editor);
+  const range = currentManualRange(editor);
+  Array.from(editor.children).forEach((block) => {
+    if(!range || range.intersectsNode(block)) block.style.textAlign = align;
+  });
+}
+function insertManualImageBlock(editor, dataURL){
+  const wrap = document.createElement('div');
+  wrap.style.textAlign = 'center';
+  const img = document.createElement('img');
+  img.src = dataURL;
+  wrap.appendChild(img);
+
+  let range = currentManualRange(editor);
+  if(!range){
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  range.deleteContents();
+  range.insertNode(wrap);
+
+  const after = document.createRange();
+  after.setStartAfter(wrap);
+  after.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(after);
 }
 const MANUAL_ALLOWED_TAGS = new Set(['B','STRONG','I','EM','U','BR','DIV','P','IMG','SPAN','FONT']);
 function sanitizeManualStyle(styleStr){
@@ -1415,9 +1462,9 @@ function openManualFormModal(existing){
       <div class="editor-toolbar">
         <button type="button" class="editor-btn" data-cmd="bold" title="굵게"><b>B</b></button>
         <button type="button" class="editor-btn" data-cmd="italic" title="기울임"><i>I</i></button>
-        <button type="button" class="editor-btn" data-cmd="justifyLeft" title="왼쪽 정렬"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/></svg></button>
-        <button type="button" class="editor-btn" data-cmd="justifyCenter" title="가운데 정렬"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="6" y1="18" x2="18" y2="18"/></svg></button>
-        <button type="button" class="editor-btn" data-cmd="justifyRight" title="오른쪽 정렬"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="20" y2="18"/></svg></button>
+        <button type="button" class="editor-btn" data-align="left" title="왼쪽 정렬"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/></svg></button>
+        <button type="button" class="editor-btn" data-align="center" title="가운데 정렬"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="6" y1="18" x2="18" y2="18"/></svg></button>
+        <button type="button" class="editor-btn" data-align="right" title="오른쪽 정렬"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="20" y2="18"/></svg></button>
         <input type="color" class="editor-btn editor-color" id="mColorInput" title="글자색" value="#1B2A4A">
         <button type="button" class="editor-btn" id="mInsertImageBtn" title="사진 삽입">🖼 사진 삽입</button>
         <input type="file" id="mImageInput" accept="image/*" style="display:none">
@@ -1435,6 +1482,13 @@ function openManualFormModal(existing){
     btn.addEventListener('mousedown', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
       document.execCommand(btn.dataset.cmd, false, null);
+      el('mContentEditor').focus();
+    });
+  });
+  document.querySelectorAll('.editor-btn[data-align]').forEach((btn) => {
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', () => {
+      applyManualAlign(el('mContentEditor'), btn.dataset.align);
       el('mContentEditor').focus();
     });
   });
@@ -1465,8 +1519,9 @@ function openManualFormModal(existing){
     if(!file) return;
     try{
       const dataURL = await resizeImageToDataURLFit(file, 640);
-      el('mContentEditor').focus();
-      document.execCommand('insertImage', false, dataURL);
+      const editor = el('mContentEditor');
+      editor.focus();
+      insertManualImageBlock(editor, dataURL);
     }catch(err){ el('mError').textContent = '이미지를 불러오지 못했습니다. 다른 파일을 선택해주세요.'; }
   });
   el('mSubmit').addEventListener('click', async () => {
