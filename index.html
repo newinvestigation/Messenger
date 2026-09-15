@@ -438,7 +438,7 @@ const CHAT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const RECRUIT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16 8.5a4 4 0 0 1 0 7"/></svg>';
 
 let isAdmin = false;
-let db = null, messagesCol = null, recruitsCol = null, agentsCol = null, manualsCol = null;
+let db = null, messagesCol = null, recruitsCol = null, agentsCol = null, manualsCol = null, roomAccessCol = null;
 let currentMode = 'chat';
 let selectedChannelId = CHANNELS[0].id;
 const CHANNEL_MESSAGE_LIMIT = 150;
@@ -770,6 +770,7 @@ el('adminToggleBtn').addEventListener('click', () => {
     el('adminToggleBtn').classList.remove('on');
     renderDetailPanel();
     if(currentMode === 'recruit'){ renderRecruitRows(); }
+    if(currentMode === 'chat'){ renderChatList(); }
     return;
   }
   openModal(`
@@ -789,6 +790,7 @@ el('adminToggleBtn').addEventListener('click', () => {
       el('adminToggleBtn').classList.add('on');
       renderDetailPanel();
       if(currentMode === 'recruit'){ renderRecruitRows(); }
+      if(currentMode === 'chat'){ renderChatList(); }
     }else{ el('pwError').textContent = '암호가 맞지 않습니다.'; }
   };
   el('pwSubmit').addEventListener('click', submit);
@@ -831,9 +833,14 @@ function renderDetailPanel(){
 /* ---------- 채널 (공용 채팅) ---------- */
 function renderChatList(){
   el('listPanel').innerHTML = `
-    <div class="list-header"><h2><span class="hdr-mark-icon">${CHAT_ICON}</span> 채널</h2></div>
+    <div class="list-header">
+      <h2><span class="hdr-mark-icon">${CHAT_ICON}</span> 채널</h2>
+      ${isAdmin ? `<button class="btn btn-ghost btn-small" id="roomLogBtn">입장 기록</button>` : ''}
+    </div>
     <div class="list-body" id="channelListBody"></div>
   `;
+  const logBtn = el('roomLogBtn');
+  if(logBtn) logBtn.addEventListener('click', openRoomAccessLogModal);
   renderChannelRows();
 }
 function renderChannelRows(){
@@ -863,6 +870,7 @@ function selectChannel(id){
   subscribeChannelMessages(id);
 }
 function openRoomPasswordModal(ch){
+  if(!requireProfile()) return;
   openModal(`
     <h3>${escapeHtml(ch.name)}</h3>
     <div class="field"><label for="roomPwInput">비밀번호</label><input type="password" id="roomPwInput" autocomplete="off"></div>
@@ -882,11 +890,46 @@ function openRoomPasswordModal(ch){
       showMobileDetail();
       renderChatDetail();
       subscribeChannelMessages(ch.id);
+      addDoc(roomAccessCol, {
+        roomId: ch.id, roomName: ch.name,
+        agentId: myAgentId, agentName: myProfile.name,
+        unlockedAt: serverTimestamp()
+      }).catch(() => {});
     }else{ el('roomPwError').textContent = '비밀번호가 맞지 않습니다.'; }
   };
   el('roomPwSubmit').addEventListener('click', submit);
   input.addEventListener('keydown', (e) => { if(isSubmitEnter(e)) submit(); });
   el('roomPwCancel').addEventListener('click', closeModal);
+}
+async function openRoomAccessLogModal(){
+  openModal(`
+    <h3>입장 기록</h3>
+    <p class="hint">비밀번호로 보호된 방에 입장한 기록입니다.</p>
+    <div id="roomLogBody" style="max-height:340px; overflow-y:auto;"><div class="empty">불러오는 중…</div></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="roomLogClose">닫기</button>
+    </div>
+  `);
+  el('roomLogClose').addEventListener('click', closeModal);
+  try{
+    const snap = await getDocs(query(roomAccessCol, orderBy('unlockedAt', 'desc'), limit(100)));
+    const body = el('roomLogBody');
+    if(!body) return;
+    if(snap.empty){ body.innerHTML = `<div class="empty">입장 기록이 없습니다.</div>`; return; }
+    body.innerHTML = snap.docs.map(d => {
+      const r = d.data();
+      return `
+        <div class="msg-row">
+          <div class="msg-body">
+            <div class="msg-head"><span class="msg-name">${escapeHtml(r.roomName)}</span><span class="msg-time">${formatTime(r.unlockedAt)}</span></div>
+            <p class="msg-text">${displayName(r.agentId, r.agentName)}</p>
+          </div>
+        </div>`;
+    }).join('');
+  }catch(e){
+    const body = el('roomLogBody');
+    if(body) body.innerHTML = `<div class="empty">⚠️ 기록을 불러오지 못했습니다.</div>`;
+  }
 }
 function bubbleHtml(m){
   const mine = m.authorId === myAgentId;
@@ -1460,6 +1503,7 @@ function boot(){
   recruitsCol = collection(db, 'recruits');
   agentsCol = collection(db, 'agents');
   manualsCol = collection(db, 'manuals');
+  roomAccessCol = collection(db, 'roomAccess');
 
   onSnapshot(agentsCol, (snap) => {
     const map = {};
