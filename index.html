@@ -479,7 +479,33 @@ function getLocalProfile(){
   try{ return JSON.parse(localStorage.getItem('db_agent_profile') || 'null'); }catch(e){ return null; }
 }
 function setLocalProfile(profile){ localStorage.setItem('db_agent_profile', JSON.stringify(profile)); }
-const myAgentId = getAgentId();
+function saveProfileSlots(slots){ localStorage.setItem('db_profiles', JSON.stringify(slots)); }
+function getProfileSlots(){
+  try{
+    const raw = localStorage.getItem('db_profiles');
+    if(raw){
+      const slots = JSON.parse(raw);
+      if(Array.isArray(slots) && slots.length) return slots;
+    }
+  }catch(e){}
+  if(myProfile && myProfile.name){
+    const seeded = [{ agentId: myAgentId, name: myProfile.name, bio: myProfile.bio || '', photoURL: myProfile.photoURL || null }];
+    saveProfileSlots(seeded);
+    return seeded;
+  }
+  return [];
+}
+function upsertProfileSlot(agentId, profile){
+  const slots = getProfileSlots();
+  const idx = slots.findIndex(s => s.agentId === agentId);
+  const entry = { agentId, name: profile.name, bio: profile.bio || '', photoURL: profile.photoURL || null };
+  if(idx >= 0) slots[idx] = entry; else slots.push(entry);
+  saveProfileSlots(slots);
+}
+function removeProfileSlot(agentId){
+  saveProfileSlots(getProfileSlots().filter(s => s.agentId !== agentId));
+}
+let myAgentId = getAgentId();
 let myProfile = getLocalProfile();
 
 function toJsDate(ts){
@@ -690,9 +716,23 @@ tickClock();
 setInterval(tickClock, 1000);
 
 el('profileBtn').addEventListener('click', openProfileModal);
+function profileSwitchRowHtml(slot){
+  const isActive = slot.agentId === myAgentId;
+  const avatarStyleStr = slot.photoURL ? `background-image:url('${slot.photoURL}');` : `background-color:${avatarColor(slot.agentId)};`;
+  return `
+    <div class="list-row ${isActive ? 'active' : ''}" data-switch-agent="${slot.agentId}" style="cursor:${isActive ? 'default' : 'pointer'};">
+      <div class="row-avatar" style="${avatarStyleStr}"></div>
+      <div class="row-main">
+        <div class="row-top"><span class="row-title">${escapeHtml(slot.name || '이름 없음')}${isActive ? ' (현재)' : ''}</span></div>
+        <div class="row-snippet">${escapeHtml(slot.bio || '')}</div>
+      </div>
+      ${!isActive ? `<button type="button" class="reply-link" data-remove-agent="${slot.agentId}">삭제</button>` : ''}
+    </div>`;
+}
 function openProfileModal(){
   pendingPhotoURL = (myProfile && myProfile.photoURL) || null;
   const previewStyle = pendingPhotoURL ? `background-image:url('${pendingPhotoURL}');` : `background-color:${avatarColor(myAgentId)};`;
+  const slots = getProfileSlots();
   openModal(`
     <h3>요원 등록 / 프로필</h3>
     <p class="hint">등록한 이름으로 채널과 공고에 표시됩니다. 이 기기에서만 유지됩니다.</p>
@@ -714,7 +754,46 @@ function openProfileModal(){
       <button class="btn btn-ghost" id="profCancel">취소</button>
       <button class="btn btn-primary" id="profSave">등록</button>
     </div>
+    <div class="detail-divider" style="margin-top:20px;">다른 요원으로 전환</div>
+    <div id="profileSwitchList">${slots.map(profileSwitchRowHtml).join('') || '<div class="empty">저장된 요원이 없습니다.</div>'}</div>
+    <button type="button" class="btn btn-ghost btn-small" id="newProfileBtn" style="margin-top:10px; width:100%;">+ 새 요원으로 시작</button>
   `);
+  document.querySelectorAll('[data-switch-agent]').forEach(row => {
+    row.addEventListener('click', () => {
+      const targetId = row.dataset.switchAgent;
+      if(targetId === myAgentId) return;
+      const slot = getProfileSlots().find(s => s.agentId === targetId);
+      if(!slot) return;
+      if(myProfile && myProfile.name) upsertProfileSlot(myAgentId, myProfile);
+      myAgentId = targetId;
+      myProfile = { name: slot.name, bio: slot.bio, photoURL: slot.photoURL || null };
+      localStorage.setItem('db_agent_id', myAgentId);
+      setLocalProfile(myProfile);
+      updateAgentBar();
+      closeModal();
+      renderListPanel();
+      renderDetailPanel();
+    });
+  });
+  document.querySelectorAll('[data-remove-agent]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeProfileSlot(btn.dataset.removeAgent);
+      openProfileModal();
+    });
+  });
+  el('newProfileBtn').addEventListener('click', () => {
+    if(!confirm('새 요원으로 시작할까요? 지금 프로필은 목록에 저장되어 나중에 다시 전환할 수 있어요.')) return;
+    if(myProfile && myProfile.name) upsertProfileSlot(myAgentId, myProfile);
+    myAgentId = crypto.randomUUID ? crypto.randomUUID() : ('agent-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    myProfile = null;
+    localStorage.setItem('db_agent_id', myAgentId);
+    localStorage.removeItem('db_agent_profile');
+    updateAgentBar();
+    renderListPanel();
+    renderDetailPanel();
+    openProfileModal();
+  });
   el('profNameInput').focus();
   el('photoPickBtn').addEventListener('click', () => el('photoInput').click());
   el('photoInput').addEventListener('change', async (e) => {
@@ -742,6 +821,7 @@ function openProfileModal(){
     if(!bio){ el('profError').textContent = '소속을 적어주세요.'; return; }
     myProfile = { name, bio, photoURL: pendingPhotoURL || null };
     setLocalProfile(myProfile);
+    upsertProfileSlot(myAgentId, myProfile);
     agentProfiles[myAgentId] = { name, bio, photoURL: pendingPhotoURL || null };
     updateAgentBar();
     closeModal();
