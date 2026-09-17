@@ -1640,13 +1640,13 @@ function boot(){
   manualsCol = collection(db, 'manuals');
   roomAccessCol = collection(db, 'roomAccess');
 
-  onSnapshot(agentsCol, (snap) => {
+  getDocs(agentsCol).then((snap) => {
     const map = {};
     snap.docs.forEach(d => { map[d.id] = d.data(); });
     agentProfiles = map;
     renderListPanel();
     renderDetailPanel();
-  }, (err) => console.error(err));
+  }).catch((err) => console.error(err));
 
   subscribeChannelMessages(selectedChannelId);
 
