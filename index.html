@@ -49,6 +49,8 @@
     font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:10.5px; padding:7px 22px; letter-spacing:0.2px;
     border-bottom:1px solid #D7E2F3; display:flex; align-items:center; gap:8px;
   }
+  .notice-bar.archived{ background:#EEF0F3; color:#51596B; border-bottom-color:#DCE0E6; }
+  .notice-bar.archived::before{ content:'보관됨' !important; background:#6B7488 !important; }
   .notice-bar::before{ content:'공지'; background:var(--gov-blue); color:#fff; font-size:9.5px; padding:2px 7px; border-radius:2px; letter-spacing:0.5px; flex-shrink:0; }
 
   /* ---------- Workspace: rail + list + detail ---------- */
@@ -358,7 +360,7 @@
       <div class="status-line"><span class="status-dot"></span>ONLINE · <span id="statusClock">--:--:--</span></div>
     </div>
   </header>
-  <div class="notice-bar">※ 본 통신망은 초자연재난관리국 소속 요원 전용입니다. 외부 유출을 금지합니다.</div>
+  <div class="notice-bar archived">※ 본 통신망은 더 이상 운영되지 않습니다. 지난 기록을 열람만 할 수 있는 보관 전용 페이지입니다.</div>
 
   <div class="workspace" id="workspace">
     <nav class="rail">
@@ -374,9 +376,6 @@
       <div class="rail-spacer"></div>
       <button class="rail-btn" id="notifToggleBtn" title="알림 켜기/끄기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      </button>
-      <button class="rail-btn rail-admin" id="adminToggleBtn" title="관리자">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       </button>
       <button class="rail-btn rail-avatar" id="profileBtn" title="내 프로필"><span id="railAvatarText">?</span></button>
     </nav>
@@ -408,6 +407,7 @@ const firebaseConfig = {
   appId: "1:144928327825:web:6f4a456110d2de656d1730"
 };
 const ADMIN_PASSWORD = "goguma1234";
+const ARCHIVED = true; // 더 이상 운영하지 않는 통신망: 읽기만 가능, 모든 쓰기 동작 비활성화
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import {
@@ -432,6 +432,7 @@ function markRoomUnlocked(id){
   localStorage.setItem('db_unlocked_rooms_' + myAgentId, JSON.stringify([...set]));
 }
 function isRoomLocked(ch){
+  if(ARCHIVED) return false;
   return !!ch.password && !getUnlockedRooms().includes(ch.id);
 }
 const CHAT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.4 8.4H12a8.3 8.3 0 0 1-3.8-.9L3 21l1.9-5.7A8.3 8.3 0 0 1 4 11.5 8.4 8.4 0 0 1 12.4 3H12a8.4 8.4 0 0 1 8.4 8.4z"/></svg>';
@@ -730,6 +731,47 @@ function profileSwitchRowHtml(slot){
     </div>`;
 }
 function openProfileModal(){
+  if(ARCHIVED){
+    const slots = getProfileSlots();
+    const current = (myProfile && myProfile.name)
+      ? `${escapeHtml(myProfile.name)} 요원${myProfile.bio ? ' · ' + escapeHtml(myProfile.bio) : ''}`
+      : '등록된 적 없음';
+    openModal(`
+      <h3>요원 프로필</h3>
+      <p class="hint">보관 전용 페이지라 새로 등록하거나 수정할 수 없고, 저장된 요원끼리 전환만 가능해요.</p>
+      <p style="text-align:center; font-weight:700; color:#1B2A4A; margin:0 0 16px;">현재: ${current}</p>
+      <div class="detail-divider" style="margin-top:4px;">다른 요원으로 전환</div>
+      <div id="profileSwitchList">${slots.map(profileSwitchRowHtml).join('') || '<div class="empty">저장된 요원이 없습니다.</div>'}</div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn btn-ghost" id="profCancel">닫기</button>
+      </div>
+    `);
+    document.querySelectorAll('[data-switch-agent]').forEach(row => {
+      row.addEventListener('click', () => {
+        const targetId = row.dataset.switchAgent;
+        if(targetId === myAgentId) return;
+        const slot = getProfileSlots().find(s => s.agentId === targetId);
+        if(!slot) return;
+        myAgentId = targetId;
+        myProfile = { name: slot.name, bio: slot.bio, photoURL: slot.photoURL || null };
+        localStorage.setItem('db_agent_id', myAgentId);
+        setLocalProfile(myProfile);
+        updateAgentBar();
+        closeModal();
+        renderListPanel();
+        renderDetailPanel();
+      });
+    });
+    document.querySelectorAll('[data-remove-agent]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeProfileSlot(btn.dataset.removeAgent);
+        openProfileModal();
+      });
+    });
+    el('profCancel').addEventListener('click', closeModal);
+    return;
+  }
   pendingPhotoURL = (myProfile && myProfile.photoURL) || null;
   const previewStyle = pendingPhotoURL ? `background-image:url('${pendingPhotoURL}');` : `background-color:${avatarColor(myAgentId)};`;
   const slots = getProfileSlots();
@@ -891,39 +933,6 @@ function notifyChannelMessage(m, chId){
   showToast(html, chName, m.authorName + ': ' + m.text, () => { setMode('chat'); selectChannel(chId); });
 }
 
-el('adminToggleBtn').addEventListener('click', () => {
-  if(isAdmin){
-    isAdmin = false;
-    el('adminToggleBtn').classList.remove('on');
-    renderDetailPanel();
-    if(currentMode === 'recruit'){ renderRecruitRows(); }
-    if(currentMode === 'chat'){ renderChatList(); }
-    return;
-  }
-  openModal(`
-    <h3>관리자 인증</h3>
-    <p class="hint">부적절한 게시물을 정리하려면 암호가 필요합니다.</p>
-    <div class="field"><label for="pwInput">암호</label><input type="password" id="pwInput" autocomplete="off"></div>
-    <p class="error-msg" id="pwError"></p>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="pwCancel">취소</button>
-      <button class="btn btn-primary" id="pwSubmit">확인</button>
-    </div>
-  `);
-  const input = el('pwInput'); input.focus();
-  const submit = () => {
-    if(input.value === ADMIN_PASSWORD){
-      isAdmin = true; closeModal();
-      el('adminToggleBtn').classList.add('on');
-      renderDetailPanel();
-      if(currentMode === 'recruit'){ renderRecruitRows(); }
-      if(currentMode === 'chat'){ renderChatList(); }
-    }else{ el('pwError').textContent = '암호가 맞지 않습니다.'; }
-  };
-  el('pwSubmit').addEventListener('click', submit);
-  input.addEventListener('keydown', (e) => { if(isSubmitEnter(e)) submit(); });
-  el('pwCancel').addEventListener('click', closeModal);
-});
 
 /* ---------- Mode / mobile navigation ---------- */
 document.querySelectorAll('.rail-btn[data-mode]').forEach(btn => {
@@ -1144,14 +1153,16 @@ function renderChatDetail(){
       ${isAdmin ? `<button class="btn btn-ghost btn-small" id="wipeChannelBtn">로그 삭제</button>` : ''}
     </div>
     <div class="chat-scroll" id="chatScroll"><div class="empty">불러오는 중…</div></div>
-    <div class="chat-compose">
+    ${ARCHIVED ? '' : `<div class="chat-compose">
       <input type="text" id="chatInput" maxlength="500" placeholder="메시지 입력">
       <button class="btn btn-primary" id="chatSendBtn">전송</button>
-    </div>
+    </div>`}
   `;
   el('backBtn').addEventListener('click', showMobileList);
-  el('chatSendBtn').addEventListener('click', sendChannelMessage);
-  bindEnterToSend(el('chatInput'), sendChannelMessage);
+  if(!ARCHIVED){
+    el('chatSendBtn').addEventListener('click', sendChannelMessage);
+    bindEnterToSend(el('chatInput'), sendChannelMessage);
+  }
   const wipeBtn = el('wipeChannelBtn');
   if(wipeBtn) wipeBtn.addEventListener('click', () => openWipeChannelModal(ch));
   if(currentChannelMessages.length > 0) renderChatBubbles(currentChannelMessages);
@@ -1196,12 +1207,13 @@ function renderRecruitListPanel(){
   el('listPanel').innerHTML = `
     <div class="list-header">
       <h2><span class="hdr-mark-icon">${RECRUIT_ICON}</span> 게시판</h2>
-      <button class="btn btn-primary btn-small" id="newRecruitBtn">+ 공고</button>
+      ${ARCHIVED ? '' : `<button class="btn btn-primary btn-small" id="newRecruitBtn">+ 공고</button>`}
     </div>
     <div class="list-search"><input type="text" id="recruitSearch" placeholder="공고 제목 검색"></div>
     <div class="list-body" id="recruitListBody"></div>
   `;
-  el('newRecruitBtn').addEventListener('click', () => { if(!requireProfile()) return; openRecruitFormModal(); });
+  const newRecruitBtn = el('newRecruitBtn');
+  if(newRecruitBtn) newRecruitBtn.addEventListener('click', () => { if(!requireProfile()) return; openRecruitFormModal(); });
   el('recruitSearch').addEventListener('input', renderRecruitRows);
   renderRecruitRows();
 }
@@ -1283,7 +1295,7 @@ function commentRowHtml(rep){
         <div class="msg-head"><span class="msg-name">${displayName(rep.authorId, rep.authorName)}</span><span class="msg-time">${formatTime(rep.sentAt)}</span></div>
         ${rep.replyToName ? `<div class="reply-to-tag">↳ ${escapeHtml(rep.replyToName)}님에게 답글</div>` : ''}
         <p class="msg-text">${escapeHtml(rep.text)}</p>
-        <button type="button" class="reply-link" data-reply-id="${rep.id}" data-reply-name="${escapeHtml(rep.authorName)}" data-reply-author="${escapeHtml(rep.authorId)}">답글</button>${isAdmin ? `<button type="button" class="reply-link" data-del-reply="${rep.id}">삭제</button>` : ''}
+        ${ARCHIVED ? '' : `<button type="button" class="reply-link" data-reply-id="${rep.id}" data-reply-name="${escapeHtml(rep.authorName)}" data-reply-author="${escapeHtml(rep.authorId)}">답글</button>${isAdmin ? `<button type="button" class="reply-link" data-del-reply="${rep.id}">삭제</button>` : ''}`}
       </div>
     </div>`;
 }
@@ -1298,7 +1310,7 @@ function renderRecruitDetailPanel(){
       </div>`;
     return;
   }
-  const canManage = isAdmin || r.authorId === myAgentId;
+  const canManage = !ARCHIVED && (isAdmin || r.authorId === myAgentId);
   panel.innerHTML = `
     <div class="detail-header">
       <button class="back-btn" id="backBtn" aria-label="목록으로">‹</button>
@@ -1311,7 +1323,7 @@ function renderRecruitDetailPanel(){
     </div>
     <div class="detail-scroll">
       <p class="detail-desc">${escapeHtml(r.description)}</p>
-      ${(r.authorId === myAgentId || canManage) ? `
+      ${(!ARCHIVED && (r.authorId === myAgentId || canManage)) ? `
       <div class="detail-actions">
         ${r.authorId === myAgentId ? `<button class="btn btn-ghost btn-small" id="rToggleBtn">${r.status === 'closed' ? '다시 모집' : '모집 완료 처리'}</button>` : ''}
         ${canManage ? `<button class="btn btn-ghost btn-small" id="rDeleteBtn">삭제</button>` : ''}
@@ -1319,11 +1331,11 @@ function renderRecruitDetailPanel(){
       <div class="detail-divider">참여 의사 등록</div>
       ${currentReplies.length === 0 ? `<div class="empty">등록된 댓글이 없습니다.</div>` : currentReplies.map(rep => commentRowHtml(rep)).join('')}
     </div>
-    ${replyingTo ? `<div class="replying-banner"><span>↳ ${escapeHtml(replyingTo.name)}님에게 답글 남기는 중</span><button type="button" id="cancelReplyBtn">✕</button></div>` : ''}
-    <div class="chat-compose">
+    ${(!ARCHIVED && replyingTo) ? `<div class="replying-banner"><span>↳ ${escapeHtml(replyingTo.name)}님에게 답글 남기는 중</span><button type="button" id="cancelReplyBtn">✕</button></div>` : ''}
+    ${ARCHIVED ? '' : `<div class="chat-compose">
       <input type="text" id="replyInput" maxlength="300" placeholder="${replyingTo ? replyingTo.name + '님에게 답글…' : '참여 의사를 남겨주세요'}">
       <button class="btn btn-primary" id="replySendBtn">전송</button>
-    </div>
+    </div>`}
   `;
   el('backBtn').addEventListener('click', showMobileList);
   const toggleBtn = document.getElementById('rToggleBtn');
@@ -1375,8 +1387,10 @@ function renderRecruitDetailPanel(){
     try{ await addDoc(collection(db, 'recruits', r.id, 'replies'), payload); }
     catch(e){ showToastError(); }
   };
-  el('replySendBtn').addEventListener('click', send);
-  bindEnterToSend(el('replyInput'), send);
+  if(!ARCHIVED){
+    el('replySendBtn').addEventListener('click', send);
+    bindEnterToSend(el('replyInput'), send);
+  }
 }
 
 /* ---------- 매뉴얼 게시판 ---------- */
@@ -1405,7 +1419,7 @@ function renderManualList(){
           <input type="text" id="manualSearchInput" placeholder="재난 이름 또는 내용으로 검색">
           <button type="button" id="manualSearchBtn">검색</button>
         </div>
-        <button class="btn manual-new-btn btn-small" id="newManualBtn">+ 매뉴얼 등록</button>
+        ${ARCHIVED ? '' : `<button class="btn manual-new-btn btn-small" id="newManualBtn">+ 매뉴얼 등록</button>`}
       </div>
       <div class="manual-meta" id="manualMeta"></div>
       <div id="manualTableWrap"></div>
@@ -1413,7 +1427,8 @@ function renderManualList(){
   `;
   bindManualExit();
   el('manualSearchInput').value = manualSearchQuery;
-  el('newManualBtn').addEventListener('click', () => { if(!requireProfile()) return; openManualFormModal(); });
+  const newManualBtn = el('newManualBtn');
+  if(newManualBtn) newManualBtn.addEventListener('click', () => { if(!requireProfile()) return; openManualFormModal(); });
   el('manualSearchBtn').addEventListener('click', () => { manualSearchQuery = el('manualSearchInput').value; renderManualResults(); });
   el('manualSearchInput').addEventListener('input', () => { manualSearchQuery = el('manualSearchInput').value; renderManualResults(); });
   el('manualSearchInput').addEventListener('keydown', (e) => { if(isSubmitEnter(e)){ manualSearchQuery = el('manualSearchInput').value; renderManualResults(); } });
@@ -1479,7 +1494,7 @@ function renderManualDetail(){
   const m = lastManuals.find(x => x.id === selectedManualId);
   const panel = el('manualOverlay');
   if(!m){ selectedManualId = null; renderManualList(); return; }
-  const canManage = isAdmin || m.authorId === myAgentId;
+  const canManage = !ARCHIVED && (isAdmin || m.authorId === myAgentId);
   panel.innerHTML = `
     <div class="manual-page">
       ${manualExitBtnHtml()}
@@ -1495,10 +1510,10 @@ function renderManualDetail(){
         <div class="manual-comments-section">
           <p class="manual-comments-title">댓글</p>
           ${manualComments.length === 0 ? `<div class="empty">등록된 댓글이 없습니다.</div>` : manualComments.map(manualCommentRowHtml).join('')}
-          <div class="manual-comment-compose">
+          ${ARCHIVED ? '' : `<div class="manual-comment-compose">
             <input type="text" id="manualCommentInput" maxlength="300" placeholder="댓글을 입력하세요">
             <button type="button" id="manualCommentSendBtn">등록</button>
-          </div>
+          </div>`}
         </div>
       </div>
     </div>
@@ -1518,17 +1533,19 @@ function renderManualDetail(){
       catch(e){ showToastError(); }
     });
   });
-  const sendManualComment = async () => {
-    if(!requireProfile()) return;
-    const input = el('manualCommentInput');
-    const text = input.value.trim();
-    if(!text) return;
-    input.value = '';
-    try{ await addDoc(collection(db, 'manuals', m.id, 'comments'), { authorId: myAgentId, authorName: myProfile.name, text, sentAt: new Date().toISOString() }); }
-    catch(e){ showToastError(); }
-  };
-  el('manualCommentSendBtn').addEventListener('click', sendManualComment);
-  bindEnterToSend(el('manualCommentInput'), sendManualComment);
+  if(!ARCHIVED){
+    const sendManualComment = async () => {
+      if(!requireProfile()) return;
+      const input = el('manualCommentInput');
+      const text = input.value.trim();
+      if(!text) return;
+      input.value = '';
+      try{ await addDoc(collection(db, 'manuals', m.id, 'comments'), { authorId: myAgentId, authorName: myProfile.name, text, sentAt: new Date().toISOString() }); }
+      catch(e){ showToastError(); }
+    };
+    el('manualCommentSendBtn').addEventListener('click', sendManualComment);
+    bindEnterToSend(el('manualCommentInput'), sendManualComment);
+  }
 }
 function openManualFormModal(existing){
   const isEdit = !!existing;
